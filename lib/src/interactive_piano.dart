@@ -6,6 +6,8 @@ import 'note_position.dart';
 import 'note_range.dart';
 
 typedef OnNotePositionTapped = void Function(NotePosition position);
+typedef OnNoteOn = void Function(TapDownDetails details, NotePosition position);
+typedef OnNoteOff = void Function(TapUpDetails details, NotePosition position);
 
 /// Renders a scrollable interactive piano.
 class InteractivePiano extends StatefulWidget {
@@ -42,6 +44,12 @@ class InteractivePiano extends StatefulWidget {
   /// Callback for interacting with piano keys.
   final OnNotePositionTapped? onNotePositionTapped;
 
+  /// Callback for interacting with piano keys note on.
+  final OnNoteOn? onNoteOn;
+
+  /// Callback for interacting with piano keys note off.
+  final OnNoteOff? onNoteOff;
+
   /// Set and change at any time (i.e. with `setState`) to cause the piano to scroll so that the desired note is centered.
   final NotePosition? noteToScrollTo;
 
@@ -77,6 +85,8 @@ class InteractivePiano extends StatefulWidget {
       this.hideNoteNames = false,
       this.hideScrollbar = false,
       this.onNotePositionTapped,
+      this.onNoteOn,
+      this.onNoteOff,
       this.noteToScrollTo,
       this.keyWidth})
       : super(key: key);
@@ -194,18 +204,22 @@ class _InteractivePianoState extends State<InteractivePiano> {
                           Row(
                             children: naturals
                                 .map((note) => _PianoKey(
-                                    notePosition: note,
-                                    color: widget.naturalColor,
-                                    hideNoteName: widget.hideNoteNames,
-                                    isAnimated: widget
-                                            .animateHighlightedNotes &&
-                                        widget.highlightedNotes.contains(note),
-                                    highlightColor:
-                                        widget.highlightedNotes.contains(note)
-                                            ? widget.highlightColor
-                                            : null,
-                                    keyWidth: _lastKeyWidth,
-                                    onTap: _onNoteTapped(note)))
+                                      notePosition: note,
+                                      color: widget.naturalColor,
+                                      hideNoteName: widget.hideNoteNames,
+                                      isAnimated:
+                                          widget.animateHighlightedNotes &&
+                                              widget.highlightedNotes
+                                                  .contains(note),
+                                      highlightColor:
+                                          widget.highlightedNotes.contains(note)
+                                              ? widget.highlightColor
+                                              : null,
+                                      keyWidth: _lastKeyWidth,
+                                      onTap: _onNoteTapped(note),
+                                      onTapDown: _onNoteOn(note),
+                                      onTapUp: _onNoteOff(note),
+                                    ))
                                 .toList(),
                           ),
                           Positioned(
@@ -234,6 +248,8 @@ class _InteractivePianoState extends State<InteractivePiano> {
                                                 : null,
                                             keyWidth: _lastKeyWidth,
                                             onTap: _onNoteTapped(note),
+                                            onTapDown: _onNoteOn(note),
+                                            onTapUp: _onNoteOff(note),
                                           ),
                                         )
                                         .toList(),
@@ -248,7 +264,19 @@ class _InteractivePianoState extends State<InteractivePiano> {
   void Function()? _onNoteTapped(NotePosition notePosition) =>
       widget.onNotePositionTapped == null
           ? null
-          : () => widget.onNotePositionTapped!(notePosition);
+          : () => widget.onNotePositionTapped!.call(notePosition);
+
+  GestureTapDownCallback? _onNoteOn(NotePosition notePosition) =>
+      widget.onNoteOn == null
+          ? null
+          : (TapDownDetails details) =>
+              widget.onNoteOn!.call(details, notePosition);
+
+  GestureTapUpCallback? _onNoteOff(NotePosition notePosition) =>
+      widget.onNoteOff == null
+          ? null
+          : (TapUpDetails details) =>
+              widget.onNoteOff!.call(details, notePosition);
 }
 
 class _PianoKey extends StatefulWidget {
@@ -257,6 +285,8 @@ class _PianoKey extends StatefulWidget {
   final BorderRadius _borderRadius;
   final bool hideNoteName;
   final VoidCallback? onTap;
+  final GestureTapDownCallback? onTapDown;
+  final GestureTapUpCallback? onTapUp;
   final bool isAnimated;
 
   final Color _color;
@@ -266,7 +296,9 @@ class _PianoKey extends StatefulWidget {
     required this.notePosition,
     required this.keyWidth,
     required this.hideNoteName,
-    required this.onTap,
+    this.onTap,
+    this.onTapDown,
+    this.onTapUp,
     required this.isAnimated,
     required Color color,
     Color? highlightColor,
@@ -365,11 +397,8 @@ class __PianoKeyState extends State<_PianoKey>
                         borderRadius: widget._borderRadius,
                         highlightColor: Colors.grey,
                         onTap: widget.onTap == null ? null : () {},
-                        onTapDown: widget.onTap == null
-                            ? null
-                            : (_) {
-                                widget.onTap!();
-                              },
+                        onTapDown: widget.onTapDown,
+                        onTapUp: widget.onTapUp,
                       ))),
               Positioned(
                 left: 0.0,
@@ -393,7 +422,7 @@ class __PianoKeyState extends State<_PianoKey>
                             child: Text(
                               widget.notePosition.name,
                               textAlign: TextAlign.center,
-                              textScaleFactor: 1.0,
+                              textScaler: TextScaler.linear(1.0),
                               style: TextStyle(
                                 fontSize: widget.keyWidth / 3.5,
                                 color: widget.notePosition.accidental ==
